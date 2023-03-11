@@ -1,15 +1,16 @@
 extern crate array_init;
 use array_init::array_init;
+use std::thread;
 
 // valores iniciales importantes    
-const n_autos: usize = 1;
-const n_semaforos: usize = 100;
+const N_AUTOS: usize = 1;
+const N_SEMAFOROS: usize = 100;
 
 
 // Clase semaforo
-struct Semaforo {
-    posicion: f32,
-    luz: char,
+pub struct Semaforo {
+    pub posicion: f32,
+    pub luz: char,
     semaforo_j: i32,
 }
 impl Copy for Semaforo {}
@@ -20,12 +21,12 @@ impl Clone for Semaforo {
 }
 impl Semaforo {
     fn new() -> Semaforo {
-        Semaforo {posicion: 0.0, luz: 'g', semaforo_j: 0}
+        Semaforo {posicion: 100.0, luz: 'g', semaforo_j: 0}
     }
 }
 impl Semaforo {
     fn change_color(&mut self, iteracion:f32, periodo:f32) {
-        if iteracion%(periodo/2.0) == 0.0 {
+        if iteracion%(periodo/2.0) < 0.01 {
             if self.luz == 'g'{
                 self.luz = 'r';
             }
@@ -36,10 +37,10 @@ impl Semaforo {
     }
 }
 // Clase autos
-struct Auto {
+pub struct Auto {
     // datos internos 
     prendido: bool,
-    posicion: f32,
+    pub posicion: f32,
     velocidad: f32,
     aceleracion: f32,
     modulo_aceleracion: f32,
@@ -99,7 +100,7 @@ impl Auto {
             aceleracion: 0.0,
             modulo_aceleracion: 1.0,
             auto_i: 0,
-            factor_frenado: -3.0,
+            factor_frenado: 3.0,
             velocidad_maxima: 10.0,
             distancia_no_pegado: 1.0,
             tiempo_reaccion: 0.5,
@@ -119,17 +120,17 @@ impl Auto {
     }
 }
 impl Auto {
-    fn maneja(&mut self, lista_autos: [Auto; n_autos], lista_semaforos: [Semaforo; n_semaforos], dt: f32, amarillo: bool) {
+    fn maneja(&mut self, lista_autos: [Auto; N_AUTOS], lista_semaforos: [Semaforo; N_SEMAFOROS], dt: f32, amarillo: bool) {
         if self.prendido{
             // Calculo distancia siguiente auto //////
             // distancia hasta el auto el cual es un obstaculo ahora
-            if self.auto_i != n_autos as i32 -1 && lista_autos[(self.auto_i+1) as usize].prendido != false{
+            if self.auto_i != N_AUTOS as i32 -1 && lista_autos[(self.auto_i+1) as usize].prendido != false{
                 self.dist_auto_obstaculo = lista_autos[(self.auto_i+1) as usize].posicion - self.posicion;}
             else{
                 self.dist_auto_obstaculo = 10000000.0;} // numero muy grande para que se note que no tiene un auto al frente
             
             // Calculo velocidad relativa entre los autos 
-            if self.auto_i as i32 != n_autos as i32 -1 {
+            if self.auto_i as i32 != N_AUTOS as i32 -1 {
                 self.velocidad_relativa_auto_obstaculo = lista_autos[(self.auto_i+1) as usize].velocidad - self.velocidad;}
             else {
                 self.velocidad_relativa_auto_obstaculo = 0.0; }
@@ -148,8 +149,8 @@ impl Auto {
                     println!("NOOOOOOOO"); // hay algunos que pasan en rojo (aunque esto es moderadamente realista)
                     // si se pasan todos los semaforos deten el auto
                 }
-                    
-                if self.semaforo_j == n_semaforos.try_into().unwrap(){
+                let n_semf:i32 = N_SEMAFOROS as i32;
+                if self.semaforo_j == n_semf {
                     self.prendido = false;
                     return
                 }
@@ -159,32 +160,35 @@ impl Auto {
             }
             
             //////////////////////////// AQUI PONER EL COMO SE DEBE MANEJAR //////////////////////////////////////////////////
-            // accion puede tomar valores de -5, 0, 1, o sea, frena, nada, acelera
+            // accion puede tomar valores de -3, 0, 1, o sea, frena, nada, acelera
             let mut accion:f32 = 1.0; // accion predeterminada
             
-            if amarillo == false {
-                ////// acciones relacionadas con otros autos //////
-                self.distancia_reaccion = self.tiempo_reaccion * self.velocidad;
-                self.distancia_maniobra_autos = ((self.velocidad-self.velocidad_relativa_auto_obstaculo).powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.0);
-                self.distancia_frenado_autos = self.distancia_reaccion + self.distancia_maniobra_autos + self.distancia_no_pegado;
-                if self.dist_auto_obstaculo < self.distancia_frenado_autos {
-                    accion = -self.factor_frenado;
-                }
-                ////// acciones relacionadas con los semaforos //////
-                // frenado con un semaforo si no aparece de repente el rojo
-                self.distancia_frenado_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado.powi(2)) + self.distancia_no_pegado; // tipica formula de mecánica
-                if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && self.semaforo_obstaculo.luz == 'r' {
-                    accion = -self.factor_frenado;
-                }
+            ////// acciones relacionadas con otros autos //////
+            self.distancia_reaccion = self.tiempo_reaccion * self.velocidad;
+            self.distancia_maniobra_autos = ((self.velocidad-self.velocidad_relativa_auto_obstaculo).powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.0);
+            self.distancia_frenado_autos = self.distancia_reaccion + self.distancia_maniobra_autos + self.distancia_no_pegado;
+            if self.dist_auto_obstaculo < self.distancia_frenado_autos {
+                accion = -1.0*self.factor_frenado;
             }
+            ////// acciones relacionadas con los semaforos //////
+            // frenado con un semaforo si no aparece de repente el rojo
+            self.distancia_frenado_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado.powi(2)) + self.distancia_no_pegado; // tipica formula de mecánica
+            if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos { //&& self.semaforo_obstaculo.luz == 'r' {
+                accion = -1.0*self.factor_frenado;
+            }
+            // println!("{}", self.dist_semaforo_obstaculo );
+            // println!("{}", self.distancia_frenado_semaforos);
+            // thread::sleep_ms(1000);
 
-            ////// acciones mezcladas (?) // puede que se sepa que el otro auto va a frenar porque se ve a lo lejos un semaforo
-            // poner mas cosas relacionadas con los semaforos, ej:
-            //// sabe de antes que el tiempo que dura un semaforo en estar prendido son 10 segundos, asi que si avanzó 10 segundos, es probable que el semaforo cambie de color
             //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            
             ////// Calculo del movimiento del auto //////
             self.aceleracion = accion * self.modulo_aceleracion;
-            
+            // println!("{}", self.aceleracion);
+            // println!("{}", self.semaforo_obstaculo.posicion);
+            // thread::sleep_ms(1000);
+
+
             // calculo de velocidad
             self.velocidad = self.velocidad + self.aceleracion*dt;
             if self.velocidad > self.velocidad_maxima { // implemento limite de velocidad
@@ -197,7 +201,6 @@ impl Auto {
             }
             // calculo la posicion
             self.posicion = self.posicion + self.velocidad*dt + self.aceleracion*dt.powi(2)/2.0; //- roce*dt
-    
         }
     }
 }
@@ -211,9 +214,9 @@ pub struct Simulacion {
     separacion_semaforos:f32,
     size: f32,
     // creo una lista con todos los semaforos
-    semaforos: [Semaforo; n_semaforos],
+    pub semaforos: [Semaforo; N_SEMAFOROS],
     // creo una lista con todos los autos
-    autos:[Auto; n_autos],
+    pub autos:[Auto; N_AUTOS],
     // cantidad de iteraciones realizadas
     iteracion:i32,
     // duracion del ciclo de semaforos
@@ -224,21 +227,18 @@ pub struct Simulacion {
 
 impl Simulacion {
     pub fn new(periodo_segundos: f32, dt: f32) -> Simulacion {
-        // const n_autos: i32 = n_autos2;
-        // const n_semaforos: i32 = semaforos2;
-        // n_autos: i32, n_semaforos: i32, periodo_segundos: f32, dt: f32
         // tamaño
         let separacion_semaforos:f32 = 200.0;
-        let size: f32 = n_semaforos as f32 * separacion_semaforos;
+        let size: f32 = N_SEMAFOROS as f32 * separacion_semaforos;
         
         // posicion semaforos
-        let mut posicion_semaforos:[f32; n_semaforos] = [0.0; n_semaforos]; // np.linspace(100, size, n_semaforos)
-        for i in 0..n_semaforos {
+        let mut posicion_semaforos:[f32; N_SEMAFOROS] = [0.0; N_SEMAFOROS]; // np.linspace(100, size, N_SEMAFOROS)
+        for i in 0..N_SEMAFOROS {
             posicion_semaforos[i] = (i as f32 +1.0)*separacion_semaforos as f32;
         }
         
         // creo una lista con todos los semaforos
-        let mut semaforos:[Semaforo; n_semaforos] = array_init(|_| Semaforo::new());
+        let mut semaforos:[Semaforo; N_SEMAFOROS] = array_init(|_| Semaforo::new());
         for (i, posicion) in posicion_semaforos.iter().enumerate() {
             let mut semaforo_n = Semaforo {
                 posicion: *posicion,
@@ -249,10 +249,10 @@ impl Simulacion {
         }
 
         // posicion inicial de los autos
-        let posicion_autos:[f32; n_autos] = [0.0; n_autos];
+        let posicion_autos:[f32; N_AUTOS] = [0.0; N_AUTOS];
         // creo una lista con todos los autos
         let auto_comun:Auto = Auto::new();
-        let mut autos:[Auto; n_autos] = array_init(|_| Auto::new());
+        let mut autos:[Auto; N_AUTOS] = array_init(|_| Auto::new());
         for (i, posicion) in posicion_autos.iter().enumerate() {
             let mut auto_n:Auto = Auto {
                 auto_i: i as i32,
@@ -261,6 +261,25 @@ impl Simulacion {
             };
             autos[i as usize] = auto_n;
         }
+
+
+
+        // les calculo el semaforo obstaculo inicial a los autos
+        for mut auto in autos {
+            let mut dist_semaforos:f32 = -1.0;
+            let mut j = 0;
+            while dist_semaforos <= 0.0 {
+                dist_semaforos = semaforos[j].posicion-auto.posicion;
+                j += 1;
+            }
+            auto.semaforo_j = j as i32 - 1;
+            auto.semaforo_obstaculo = semaforos[j as usize - 1 ];
+        }
+        
+        for mut auto in autos {
+        // println!("{}", auto.semaforo_obstaculo.posicion)
+        }
+
 
         // duracion del ciclo de semaforos
         let periodo:f32 = (1.0/dt)*periodo_segundos; // 60 segundos
@@ -290,10 +309,11 @@ impl Simulacion {
         for mut auto in self.autos.iter_mut() {
             auto.maneja(autos_copy, self.semaforos, self.dt, false);
         }
+        self.iteracion += 1;
+
         for mut semaforo in self.semaforos.iter_mut() {
             semaforo.change_color(self.iteracion as f32, self.periodo);
         }
-        self.iteracion += 1;
         // println!("{}", self.iteracion);
         if self.autos[0].prendido == false {
             self.simulacion_prendida = false;
