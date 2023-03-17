@@ -6,8 +6,10 @@ use plotly::{Plot, Scatter};
 use rayon::prelude::*; // usar paralelismo
 use std::sync::{Arc, Mutex}; // para modificar archivos con paralelismo
 
-const N_SIMULACIONES: f32 = 4000.;
-const DT: f32 = 0.01;
+const N_SIMULACIONES: f32 = 200.;
+const DT: f32 = 0.05;
+const amarillo: bool = true;
+const tipo: char = 'D';
 
 fn main() {
     // creo donde guardo los datos para graficar
@@ -18,14 +20,14 @@ fn main() {
     // uso esto para iterar 
     let mut periodos: Vec<f32> = vec![];
     
-    // hago np.linspace(10, 20, 201) arcaico
+    // hago np.linspace(13, 21, 201) arcaico
     for i in 0..N_SIMULACIONES as usize {
-        periodos.push(5. + i as f32 /N_SIMULACIONES*20.);
+        periodos.push(13. + i as f32 /N_SIMULACIONES*8.); // asi omega está entre 0.7 y 1.1
     }
     
     // corro muchas simulaciones con multithread con distintos periodos
     periodos.par_iter_mut().for_each(|periodo_segundos| {
-        let mut simulacion1: simulacion::Simulacion = simulacion::Simulacion::new(*periodo_segundos, DT, false);
+        let mut simulacion1: simulacion::Simulacion = simulacion::Simulacion::new(*periodo_segundos, DT, amarillo, tipo);
         let contador =Arc::clone(&contador_simulaciones_terminadas);
         loop {
             simulacion1.step();
@@ -53,10 +55,6 @@ fn main() {
        
 }
 
-
-
-
-
 ////////////////////////// GRAFICAR /////////////////////////////////////////////
 // use macroquad::{prelude::*, color};
 
@@ -68,16 +66,22 @@ fn main() {
 
 // #[macroquad::main("InputKeys")]
 // async fn main() {
-//     // creo la simulacion
-//     let mut simulacion1: simulacion::Simulacion = simulacion::Simulacion::new(12.45, DT, false);
+//     let periodo_segundos: f32 = 18.;
 
-//     let mut x = screen_width() / 2.0;
-//     let mut y = screen_height() / 2.0;
+//     // creo la simulacion
+//     let mut simulacion1: simulacion::Simulacion = simulacion::Simulacion::new(periodo_segundos, DT, amarillo, tipo);
+
+//     let mut x: f32 = screen_width() / 2.0;
+//     let mut y: f32 = screen_height() / 2.0;
 
 //     let mut color: char = 'n';
 
-//     let mut SPF = 1; // SIMULATION PER FRAME
+//     let mut SPF: i32 = 1; // SIMULATION PER FRAME
 //     let mut data0 = "1".to_string(); // SIMULATION PER FRAME
+
+//     // graficar velocidad en todos los semaforos
+//     let mut semaforo_j: i32 = 0;
+//     let mut velocidades = Vec::new();
 
 //     loop {
 
@@ -127,6 +131,14 @@ fn main() {
 //                 20.0,
 //                 BLACK,
 //             );
+
+//             draw_text(
+//                 format!("distancia semaforo: {}", auto.dist_semaforo_obstaculo).as_str(),
+//                 x - 50.0,
+//                 y + 60.0,
+//                 20.0,
+//                 BLACK,
+//             );
 //         }
 
 //         draw_text("white: distancia frenado autos", x-100., y-120., 12.0, DARKGRAY);
@@ -139,9 +151,16 @@ fn main() {
 //         let mut simulacion_por_frame:i32 = data0.parse::<i32>().unwrap();
 //         for i in 0..simulacion_por_frame{
 //             simulacion1.step();
+//             if simulacion1.autos[0].semaforo_j != semaforo_j {
+//                 velocidades.push(simulacion1.autos[0].velocidad/simulacion1.autos[0].velocidad_maxima);
+//                 semaforo_j += 1;
+//             }
 //         }
 
-//         if simulacion1.simulacion_prendida == false {break;}
+//         if simulacion1.simulacion_prendida == false {
+//             println!("{}, {}, {}", simulacion1.omega, periodo_segundos, simulacion1.autos[0].velocidad/simulacion1.autos[0].velocidad_maxima);
+//             break;
+//         }
 
 
 
@@ -162,6 +181,12 @@ fn main() {
 //         next_frame().await;
         
 //     }
+
+//     let trace = Scatter::new((0..100).collect(), velocidades).mode(Mode::Markers);
+//     let mut plot = Plot::new();
+//     plot.add_trace(trace);
+//     plot.show();
+
 // }
 
 

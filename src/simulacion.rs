@@ -1,11 +1,9 @@
 extern crate array_init;
 use array_init::array_init;
-// use std::thread;
 
 // valores iniciales importantes    
 const N_AUTOS: usize = 1;
 const N_SEMAFOROS: usize = 100;
-
 
 // Clase semaforo
 pub struct Semaforo {
@@ -23,9 +21,47 @@ impl Clone for Semaforo {
 }
 impl Semaforo {
     fn new() -> Semaforo {
-        Semaforo {posicion: 200.0, luz: 'g', semaforo_j: 0, switch_var: 0., tiempo_amarilla: 3.}
+        Semaforo {posicion: 0.0, luz: 'g', semaforo_j: 0, switch_var: 0., tiempo_amarilla: 3.5}
     }
 }
+// impl Semaforo {
+//     fn change_color(&mut self, iteracion:f32, periodo:f32, amarillo: bool, dt:f32) {
+//         // si no tenemos en cuenta la luz amarilla
+//         if amarillo == false {
+//             // iteracion%(periodo/2.0) crece todo el rato, a excepcion de cuando pasa un ciclo (vuelve a 0), por lo que si el anterior es más grande que el actual, significa que se dio un ciclo
+//             if 0.0 == iteracion%(periodo/2.0) { // si iteracion%(periodo/2.0) es mas chico que antes significa que dieron una vuelta y por tanto hay que cambiar el semaforo
+//                 if self.luz == 'g'{
+//                     self.luz = 'r';
+//                 }
+//                 else {
+//                     self.luz = 'g';
+//                 }
+//             }
+//             // guardo la variable para comparar con la siguiente iteracion
+//             self.switch_var = iteracion%(periodo/2.0);
+//         }
+//         // si tenemos en cuenta la luz amarilla
+//         else {
+//             // cambio de la mitad periodo
+//             if 0.0 == iteracion%(periodo/2.0) { // si iteracion%(periodo/2.0) es mas chico que antes significa que dieron una vuelta y por tanto hay que cambiar el semaforo
+//                 if self.luz == 'y'{
+//                     self.luz = 'r';
+//                 }
+//                 else if self.luz == 'r'{
+//                     self.luz = 'g';
+//                 }
+//             }
+//             // parte del periodo de la luz verde ahora va a ser amarilla
+//             if self.luz == 'g' && iteracion%(periodo/2.) - (periodo/2. - 1./dt*self.tiempo_amarilla) == 0. {
+//                 self.luz = 'y';
+//             }
+//             self.switch_var = iteracion%(periodo/2.0);
+//         }
+//     }
+// }
+
+
+
 impl Semaforo {
     fn change_color(&mut self, iteracion:f32, periodo:f32, amarillo: bool, dt:f32) {
         // si no tenemos en cuenta la luz amarilla
@@ -61,6 +97,9 @@ impl Semaforo {
         }
     }
 }
+
+
+
 // Clase autos
 pub struct Auto {
     // datos internos 
@@ -81,12 +120,12 @@ pub struct Auto {
     pub distancia_frenado_semaforos: f32,
 
     // semaforo obstaculo actual
-    semaforo_j: i32,
+    pub semaforo_j: i32,
 
     // valores de distancia dentro de la simulacion
     dist_auto_obstaculo: f32,
     velocidad_relativa_auto_obstaculo: f32,
-    dist_semaforo_obstaculo:f32,
+    pub dist_semaforo_obstaculo:f32,
 
     // la accion
     pub accion: f32,
@@ -133,8 +172,8 @@ impl Auto {
             auto_i: 0,
             factor_frenado: 3.0,
             velocidad_maxima: 14.0,
-            distancia_no_pegado: 1.0,
-            tiempo_reaccion: 0.5,
+            distancia_no_pegado: 2.0,
+            tiempo_reaccion: 0.05,
             distancia_reaccion: 0.0,
             distancia_maniobra_autos: 0.0,
             distancia_maniobra_semaforos: 0.0,
@@ -154,7 +193,7 @@ impl Auto {
     }
 }
 impl Auto {
-    fn maneja(&mut self, lista_autos: [Auto; N_AUTOS], lista_semaforos: [Semaforo; N_SEMAFOROS], dt: f32, amarillo: bool) {
+    fn maneja(&mut self, lista_autos: [Auto; N_AUTOS], lista_semaforos: [Semaforo; N_SEMAFOROS], dt: f32, amarillo: bool, tipo: char) {
         if self.prendido{
             // Calculo distancia siguiente auto //////
             // distancia hasta el auto el cual es un obstaculo ahora
@@ -176,11 +215,19 @@ impl Auto {
             // si adelanta al semaforo, usar como semaforo actual al siguiente semaforo
             if self.dist_semaforo_obstaculo < 0.0 {
                 self.semaforo_j += 1; 
+
+                if lista_semaforos[0].luz == 'r' {
+                    self.paso_rojo = true;
+                }
                 
                 let n_semf:i32 = N_SEMAFOROS as i32;
                 if self.semaforo_j == n_semf {
-                    self.prendido = false;
-                    return
+                        if self.paso_rojo == true {
+                            self.velocidad = 0.;
+                        }
+                        self.prendido = false;
+                        return
+
                 }
             }
         
@@ -189,39 +236,134 @@ impl Auto {
             // accion puede tomar valores de -3, 0, 1, o sea, frena, nada, acelera
             self.accion = 1.0;
 
-            ////// acciones relacionadas con otros autos //////
-            self.distancia_reaccion = self.tiempo_reaccion * self.velocidad;
-            self.distancia_maniobra_autos = ((self.velocidad-self.velocidad_relativa_auto_obstaculo).powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.0);
-            self.distancia_frenado_autos = self.distancia_reaccion + self.distancia_maniobra_autos + self.distancia_no_pegado;
-            if self.dist_auto_obstaculo < self.distancia_frenado_autos {
-                self.accion = -1.0*self.factor_frenado;
-            }
-            ////// acciones relacionadas con los semaforos //////
-            // frenado con un semaforo si no aparece de repente el rojo
-            self.distancia_maniobra_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.);
-            self.distancia_frenado_semaforos = self.distancia_maniobra_semaforos; //+ self.distancia_reaccion + self.distancia_no_pegado;
-            if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && lista_semaforos[self.semaforo_j as usize].luz != 'g' {
-                self.accion = -1.0*self.factor_frenado;
-            }
-            
-            if amarillo == true {
-                if lista_semaforos[self.semaforo_j as usize].luz == 'y' && self.velocidad >= self.velocidad_maxima && self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos/1000. {
-                    self.accion = 1.;
+            if tipo == 'A' {
+                ////// acciones relacionadas con otros autos //////
+                self.distancia_reaccion = self.tiempo_reaccion * self.velocidad;
+                self.distancia_maniobra_autos = ((self.velocidad-self.velocidad_relativa_auto_obstaculo).powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.0);
+                self.distancia_frenado_autos = self.distancia_reaccion + self.distancia_maniobra_autos + self.distancia_no_pegado;
+                if self.dist_auto_obstaculo < self.distancia_frenado_autos {
+                    self.accion = -1.0*self.factor_frenado;
+                }
+                ////// acciones relacionadas con los semaforos //////
+                // frenado con un semaforo si no aparece de repente el rojo
+                self.distancia_maniobra_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.);
+                self.distancia_frenado_semaforos = self.distancia_maniobra_semaforos; //+ self.distancia_reaccion + self.distancia_no_pegado;
+                if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && lista_semaforos[self.semaforo_j as usize].luz != 'g' {
+                    self.accion = -1.0*self.factor_frenado;
+                }
+                
+                if amarillo == true {
+                    if lista_semaforos[self.semaforo_j as usize].luz == 'y' && self.velocidad >= self.velocidad_maxima && self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos/1000. {
+                        self.accion = 1.;
+                    }
+                }
+
+                if self.dist_semaforo_obstaculo < 0.0 {
+                    if lista_semaforos[0].luz == 'r' {
+                        self.paso_rojo = true;
+                    }
+                }
+                
+                if self.paso_rojo == true {
+                    self.accion = -1.0*self.factor_frenado;
+                    if self.velocidad <= 0. && lista_semaforos[self.semaforo_j as usize].luz == 'g' {
+                        self.paso_rojo = false;
+                    }
                 }
             }
 
-            if self.dist_semaforo_obstaculo < 0.0 {
-                if lista_semaforos[0].luz == 'r' {
-                    self.paso_rojo = true;
+            if tipo == 'B' {
+                ////// acciones relacionadas con otros autos //////
+                self.distancia_reaccion = self.tiempo_reaccion * self.velocidad;
+                self.distancia_maniobra_autos = ((self.velocidad-self.velocidad_relativa_auto_obstaculo).powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.0);
+                self.distancia_frenado_autos = self.distancia_reaccion + self.distancia_maniobra_autos + self.distancia_no_pegado;
+                if self.dist_auto_obstaculo < self.distancia_frenado_autos {
+                    self.accion = 1000.
+                }
+                ////// acciones relacionadas con los semaforos //////
+                // frenado con un semaforo si no aparece de repente el rojo
+                self.distancia_maniobra_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.);
+                self.distancia_frenado_semaforos = self.distancia_maniobra_semaforos + self.distancia_no_pegado; //+ self.distancia_reaccion + self.distancia_no_pegado;
+                if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && lista_semaforos[self.semaforo_j as usize].luz != 'g' {
+                    self.accion = -1.0*self.factor_frenado;
+                }
+                
+                if amarillo == true {
+                    if lista_semaforos[self.semaforo_j as usize].luz == 'y' && self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos {
+                        if self.velocidad < self.velocidad_maxima*0.9 {
+                            self.accion = -1.0*self.factor_frenado
+                        }
+                        else {
+                            self.accion = 1.;
+                        }
+                    }
+                }
+            }
+
+            if tipo == 'C' {
+                ////// acciones relacionadas con los semaforos //////
+                // frenado con un semaforo si no aparece de repente el rojo
+                self.distancia_maniobra_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.);
+                self.distancia_frenado_semaforos = self.distancia_maniobra_semaforos + self.distancia_no_pegado; //+ self.distancia_reaccion + self.distancia_no_pegado;
+                if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && lista_semaforos[self.semaforo_j as usize].luz != 'g' {
+                    self.accion = -1.0*self.factor_frenado;
+                }
+                
+                if amarillo == true {
+                    if lista_semaforos[self.semaforo_j as usize].luz == 'y' && self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos {
+                        if self.velocidad < self.velocidad_maxima*0.9 {
+                            self.accion = -1.0*self.factor_frenado
+                        }
+                        else {
+                            self.accion = 1.;
+                        }
+                    }
+                }
+
+                // if self.dist_semaforo_obstaculo < 0.0 {
+                //     if lista_semaforos[0].luz == 'r' {
+                //         self.paso_rojo = true;
+                //     }
+                // }
+                
+                // if self.paso_rojo == true {
+                //     self.accion = -1.0*self.factor_frenado;
+                //     if self.velocidad <= 0. && lista_semaforos[self.semaforo_j as usize].luz == 'g' {
+                //         self.paso_rojo = false;
+                //     }
+                // }
+            }
+
+            if tipo == 'D' {
+                ////// acciones relacionadas con los semaforos //////
+                // frenado con un semaforo si no aparece de repente el rojo
+                let otros: f32 = 0.;//self.velocidad*dt + 2.*dt*2.*dt/(2.*2.) + 2.*dt + 2.*2./(2.*6.);
+                self.distancia_maniobra_semaforos = (self.velocidad.powi(2))/(self.modulo_aceleracion*self.factor_frenado*2.);
+                self.distancia_frenado_semaforos = self.distancia_maniobra_semaforos + self.distancia_reaccion + self.distancia_no_pegado + otros; //+ self.distancia_reaccion + self.distancia_no_pegado;
+                if self.dist_semaforo_obstaculo < self.distancia_frenado_semaforos && lista_semaforos[self.semaforo_j as usize].luz != 'g' {
+                    self.accion = -1.0*self.factor_frenado;
+                }
+                
+                if amarillo == true {
+                    if lista_semaforos[self.semaforo_j as usize].luz == 'y' {
+                        self.accion = 1.;
+                    }
+                }
+
+                // if self.dist_semaforo_obstaculo < 0.0 {
+                //     if lista_semaforos[0].luz == 'r' {
+                //         self.paso_rojo = true;
+                //     }
+                // }
+                
+                if self.paso_rojo == true {
+                    self.accion = -1.0*self.factor_frenado;
+                    if self.velocidad <= 0. && lista_semaforos[self.semaforo_j as usize].luz == 'g' {
+                        self.paso_rojo = false;
+                    }
                 }
             }
             
-            if self.paso_rojo == true {
-                self.accion = -1.0*self.factor_frenado;
-                if self.velocidad <= 0. && lista_semaforos[self.semaforo_j as usize].luz == 'g' {
-                    self.paso_rojo = false;
-                }
-            }
 
             //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             
@@ -235,8 +377,7 @@ impl Auto {
                 self.velocidad = self.velocidad_maxima;
                 self.aceleracion = 0.0;
             }
-
-            if self.velocidad < 0.0 {
+            else if self.velocidad < 0.0 {
                 self.velocidad = 0.0;
                 self.aceleracion = 0.0;
             }
@@ -277,10 +418,12 @@ pub struct Simulacion {
     pub omega: f32,
 
     amarillo: bool,
+
+    tipo: char,
 }
 
 impl Simulacion {
-    pub fn new(periodo_segundos: f32, dt: f32, amarillo: bool) -> Simulacion {
+    pub fn new(periodo_segundos: f32, dt: f32, amarillo: bool, tipo: char) -> Simulacion {
         // tamaño
         let separacion_semaforos:f32 = 200.0;
         let size: f32 = N_SEMAFOROS as f32 * separacion_semaforos;
@@ -356,7 +499,8 @@ impl Simulacion {
             periodo: periodo, 
             simulacion_prendida: true,
             omega: omega,
-            amarillo: amarillo };
+            amarillo: amarillo,
+            tipo: tipo, };
 
         return datos
     }
@@ -369,7 +513,7 @@ impl Simulacion {
     pub fn step(&mut self) {
         let autos_copy = self.autos; // para que todos los autos usen el mismo frame, y no vaya cambiando con el movimiento de los autos anteriores
         for mut auto in self.autos.iter_mut() {
-            auto.maneja(autos_copy, self.semaforos, self.dt, self.amarillo);
+            auto.maneja(autos_copy, self.semaforos, self.dt, self.amarillo, self.tipo);
             // auto.choque(self.semaforos, self.periodo ,self.dt);
         }
         self.iteracion += 1;
